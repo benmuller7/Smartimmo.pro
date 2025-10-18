@@ -1,18 +1,13 @@
 /*****************************************
- * script.js — version complète (Smartimmo)
- * - Wizard multi-étapes + validations
- * - Popup hors zone (départements autorisés)
- * - Suggestions de villes (API Gouv)
- * - Récap + spinner + confirmation
- * - Waitlist popup
- * - EmailJS (2 emails)
- * - Enregistrement Google Sheet via Apps Script
- * - Debug iPad (coccinelle) activable
+ * script.js — version stable & complète (GAS)
  *****************************************/
+
+/** ==== CONFIG GAS ==== */
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwlbnnO-eVRZaaq-5oNEqyhglSwzd9OS67WCsqC-MtGkzFjXEKb8sFRzL5iFqqifkH_Rw/exec';
 
 /** Génère un ID unique format : DEP-YYMMDDHHMM-RR */
 const generateUniqueId = (postalCode) => {
-  const dep = (postalCode || '').slice(0, 2) || '00';
+  const dep = (postalCode || '').slice(0, 2);
   const now = new Date();
   const YY = String(now.getFullYear()).slice(-2);
   const MM = String(now.getMonth() + 1).padStart(2, "0");
@@ -26,52 +21,61 @@ const generateUniqueId = (postalCode) => {
 /** Départements autorisés */
 const ALLOWED_DEPARTMENTS = ['08', '51'];
 
-/** URL Apps Script (Web App /exec) — mets bien TON URL déployée ici */
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycby11VTNgTvfjtZqw-LqkdUEjBlG3mgCZT0bYt6uuEIRdNEJhu-24Rx3F3AlmOmlDRfiqw/exec";
-
-/* =========================================
-   DEBUG HELPER iPad (amovible)
-   Active: ?debug=1, triple-tap, ou appui long (1.5s) sur <header>
-========================================= */
-(function setupSmartDebug() {
-  const qsDebug = /[?&]debug=1\b/.test(location.search);
-  const panel = document.createElement('div');
-  panel.id = 'smart-debug-panel';
-  panel.style.cssText = `position:fixed;left:8px;right:8px;bottom:8px;max-height:42vh;overflow:auto;z-index:999999;background:#0b1020;color:#e6f0ff;font:12px/1.4 -apple-system,Segoe UI,Arial;border:1px solid #223;border-radius:10px;padding:10px;display:${qsDebug?'block':'none'};box-shadow:0 10px 30px rgba(0,0,0,.35);`;
-  panel.innerHTML = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-    <strong>🐞 Debug</strong><span style="opacity:.7">— iPad console</span><span style="margin-left:auto"></span>
-    <button id="dbg-clear" style="background:#263;color:#fff;border:none;border-radius:8px;padding:6px 10px;">Effacer</button>
-  </div><div id="dbg-log" style="white-space:pre-wrap;"></div>`;
-  const btn = document.createElement('button');
-  btn.id = 'smart-debug-toggle'; btn.type='button'; btn.textContent='🐞';
-  btn.style.cssText = `position:fixed;right:8px;bottom:56vh;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:#4A5BBE;color:#fff;box-shadow:0 6px 18px rgba(0,0,0,.25);display:${qsDebug?'block':'none'};`;
-  btn.addEventListener('click', ()=>{ panel.style.display = (panel.style.display==='none'?'block':'none'); });
-  document.addEventListener('DOMContentLoaded', ()=>{ document.body.appendChild(panel); document.body.appendChild(btn); });
-  function addLine(kind,args){ const log=document.getElementById('dbg-log'); if(!log) return;
-    const t=new Date().toLocaleTimeString();
-    const msg=args.map(a=>a instanceof Error?`${a.name}: ${a.message}\n${a.stack||''}`: typeof a==='object'?(()=>{try{return JSON.stringify(a,null,2)}catch{return String(a)}})():String(a)).join(' ');
-    const color=kind==='error'?'#ff8a80':(kind==='warn'?'#ffd180':'#9be7ff');
-    const div=document.createElement('div'); div.style.cssText=`border-left:3px solid ${color};padding-left:8px;margin:6px 0;`; div.textContent=`[${t}] ${kind.toUpperCase()} — ${msg}`;
-    log.appendChild(div); log.scrollTop=log.scrollHeight; }
-  const DBG={ showToggle:()=>{btn.style.display='block'}, open:()=>{panel.style.display='block'}, clear:()=>{const l=document.getElementById('dbg-log'); if(l) l.innerHTML='';},
-    log:(...a)=>addLine('log',a), warn:(...a)=>addLine('warn',a), error:(...a)=>addLine('error',a),
-    show:(html)=>{ const mc=document.getElementById('messageContainer'); if(!mc) return alert(html.replace(/<[^>]+>/g,'')); mc.innerHTML=html; mc.className='message error'; mc.style.display='block'; }};
-  window.DBG=DBG;
-  document.addEventListener('click', (function(){ let c=0,t; return ()=>{ c++; clearTimeout(t); t=setTimeout(()=>{ if(c>=3){ DBG.showToggle(); DBG.open(); } c=0; }, 450); }; })());
-  document.addEventListener('DOMContentLoaded', ()=>{ const header=document.querySelector('header')||document.body; let timer=null;
-    header.addEventListener('touchstart', ()=>{ timer=setTimeout(()=>{ DBG.showToggle(); DBG.open(); },1500); }, {passive:true});
-    header.addEventListener('touchend', ()=>{ clearTimeout(timer); }, {passive:true}); });
-  document.addEventListener('click', (e)=>{ if(e.target && e.target.id==='dbg-clear') DBG.clear(); });
-  window.onerror=(msg,src,line,col,err)=>{ DBG.error('window.onerror',{msg,src,line,col,err:(err?(err.stack||err.message||String(err)):String(msg))}); DBG.show(`Erreur JS : <code>${String(msg)}</code><br>Source: <code>${src}:${line}:${col}</code>`); };
-  window.addEventListener('unhandledrejection',(e)=>{ const r=e.reason||{}; DBG.error('unhandledrejection',r); DBG.show(`Promesse rejetée : <code>${String(r.message||r)}</code>`); });
-})();
-/* ===== FIN DEBUG HELPER ===== */
-
 document.addEventListener('DOMContentLoaded', () => {
-  /* ========= EmailJS ========= */
-  if (window.emailjs && typeof emailjs.init === 'function') {
-    emailjs.init('mgZZQLZBSBI7EbaiG');
+  /* ========= EmailJS supprimé ========= */
+  // (plus d'init emailjs)
+  
+  /* ======= Formatage automatique du numéro de téléphone ======= */
+  const phoneInput = document.getElementById('phone');
+  if (phoneInput) {
+    phoneInput.addEventListener('input', (e) => {
+      // Supprime tout sauf les chiffres
+      let val = e.target.value.replace(/\D/g, '');
+      // Coupe en groupes de 2 chiffres
+      let parts = val.match(/.{1,2}/g);
+      // Reformate avec un espace entre chaque groupe
+      if (parts) e.target.value = parts.join(' ');
+    });
+
+    // Nettoie les espaces avant envoi du formulaire (optionnel)
+    phoneInput.addEventListener('blur', (e) => {
+      e.target.value = e.target.value.trim();
+    });
   }
+  /* ======= CGU en modale ======= */
+  const CGU_URL   = 'cgu-popup.html';
+  const cguModal  = document.getElementById('cgu-modal');
+  const cguClose  = document.getElementById('cguClose');
+  const cguIframe = document.getElementById('cguIframe');
+
+  // Tous les liens possibles vers les CGU
+  const cguTriggers = [
+    ...document.querySelectorAll('#cguLink, .cgu-link, a[href*="cgu"]')
+  ];
+
+  const openCgu = (e) => {
+    if (e) e.preventDefault();
+    if (!cguModal || !cguIframe) return;       // sécurité si HTML pas encore en place
+    cguIframe.src = CGU_URL;                    // charge la page dans l’iframe
+    cguModal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('no-scroll');   // optionnel: bloque le scroll de fond
+    setTimeout(() => cguClose?.focus(), 0);
+  };
+
+  const closeCgu = () => {
+    if (!cguModal) return;
+    cguModal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('no-scroll');
+  };
+
+  cguTriggers.forEach(a => a.addEventListener('click', openCgu));
+  cguClose?.addEventListener('click', closeCgu);
+  cguModal?.addEventListener('click', (e) => {
+    if (e.target === cguModal) closeCgu();     // clic en dehors du contenu => fermer
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && cguModal?.getAttribute('aria-hidden') === 'false') closeCgu();
+  });
 
   /* ========= Références ========= */
   const form = document.getElementById('repairForm');
@@ -88,12 +92,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const postalCodeInput = document.getElementById('postalCode');
   const cityInput = document.getElementById('city');
 
-  // Suggestions ville
+  // Suggestions ville (conteneur sous le champ CP)
   const citySuggestionsContainer = document.createElement('div');
   citySuggestionsContainer.classList.add('city-suggestions');
   citySuggestionsContainer.setAttribute('role', 'listbox');
   citySuggestionsContainer.style.display = 'none';
+  if (postalCodeInput?.parentElement) {
   postalCodeInput.parentElement.appendChild(citySuggestionsContainer);
+}
 
   // Popup “hors zone”
   const popupOverlay  = document.getElementById('popup-departement');
@@ -110,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const showMessage = (message, type = 'error', timeout = 5000) => {
     if (!messageContainer) return;
-    messageContainer.innerHTML = message;
+    messageContainer.textContent = message;
     messageContainer.className = `message ${type}`;
     messageContainer.style.display = 'block';
     if (timeout > 0) {
@@ -192,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
-  /* ========= Sélecteurs (rôle / type / priorité) ========= */
+  /* ========= Sélecteurs (inchangé) ========= */
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('.select-btn');
     if (!btn) return;
@@ -202,16 +208,50 @@ document.addEventListener('DOMContentLoaded', () => {
     group.querySelectorAll('.select-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
-    // input[type=hidden] situé juste après
     let hidden = group.nextElementSibling;
     if (hidden && hidden.classList?.contains('field-error')) hidden = hidden.nextElementSibling;
     if (hidden && hidden.type === 'hidden') hidden.value = btn.dataset.value || '';
 
-    // Nettoie erreurs
     const err = group.nextElementSibling?.classList?.contains('field-error') ? group.nextElementSibling : null;
     group.classList.remove('invalid');
     if (err) err.hidden = true;
   });
+
+  /* ========= TOOLTIP tactile (NOUVEAU) =========
+     — Affiche une info-bulle sur iPad/mobile par appui long (600 ms).
+     — Le hover/focus clavier reste géré par le CSS (::before/::after).
+  */
+  (function enableLongPressTooltips(){
+    const selectButtons = document.querySelectorAll('.select-btn[data-tooltip]');
+    if (!selectButtons.length) return;
+
+    const DELAY = 600;   // durée d’appui pour ouvrir
+    const HIDE  = 800;   // durée avant fermeture après relâchement
+    let timer;
+
+    const start = (btn) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => btn.classList.add('show-tooltip'), DELAY);
+    };
+    const cancel = (btn) => {
+      clearTimeout(timer);
+      setTimeout(() => btn.classList.remove('show-tooltip'), HIDE);
+    };
+
+    selectButtons.forEach(btn => {
+      btn.addEventListener('touchstart', (e)=>{ e.stopPropagation(); start(btn); }, {passive:true});
+      btn.addEventListener('touchend',   ()=> cancel(btn));
+      btn.addEventListener('touchcancel',()=> cancel(btn));
+      // Tap simple : masque si ouvert
+      btn.addEventListener('click', ()=> btn.classList.remove('show-tooltip'));
+    });
+
+    // Tap ailleurs : on masque toutes les bulles
+    document.addEventListener('touchstart', () => {
+      document.querySelectorAll('.select-btn.show-tooltip')
+        .forEach(b => b.classList.remove('show-tooltip'));
+    }, {passive:true});
+  })();
 
   /* ========= Suggestions de villes ========= */
   let debounceTimeout, abortCtrl;
@@ -264,18 +304,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 300);
   });
 
-  // Popup au blur si CP valide mais hors zone
   postalCodeInput.addEventListener('blur', () => {
     const v = postalCodeInput.value.trim();
     if (/^\d{5}$/.test(v) && !isAllowedPostalCode(v)) openPopup();
   });
 
-  /* ========= Validation par étape ========= */
+  /* ========= Validation / Navigation ========= */
   const validateStep = () => {
     const stepEl = steps[currentStep];
     let isValid = true;
 
-    // Visibles
     stepEl.querySelectorAll('input[required]:not([type="hidden"]), textarea[required]').forEach((input) => {
       const val = (input.value || '').trim();
 
@@ -297,7 +335,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!ok) isValid = false;
     });
 
-    // Cachés (role/type/priority)
     stepEl.querySelectorAll('input[type="hidden"][required]').forEach((hidden) => {
       const ok = !!(hidden.value || '').trim();
       let group = hidden.previousElementSibling;
@@ -315,13 +352,14 @@ document.addEventListener('DOMContentLoaded', () => {
     return isValid;
   };
 
-  // Nettoyage invalid en saisie
   document.querySelectorAll('input, textarea').forEach((el) =>
     el.addEventListener('input', () => el.classList.remove('invalid'))
   );
 
-  /* ========= Navigation ========= */
-  prevBtn.addEventListener('click', () => { if (currentStep > 0) { currentStep--; initializeSteps(); } });
+  prevBtn.addEventListener('click', () => {
+    if (currentStep > 0) { currentStep--; initializeSteps(); }
+  });
+
   nextBtn.addEventListener('click', () => {
     if (!validateStep()) {
       if (currentStep === 1) {
@@ -331,15 +369,17 @@ document.addEventListener('DOMContentLoaded', () => {
       showMessage('Veuillez remplir tous les champs obligatoires correctement avant de continuer.', 'error');
       return;
     }
+
     if (currentStep === 1) {
       const v = postalCodeInput.value.trim();
       if (!/^\d{5}$/.test(v)) { showMessage('Veuillez saisir un code postal valide (5 chiffres).', 'error'); return; }
       if (!isAllowedPostalCode(v)) { openPopup(); return; }
     }
+
     if (currentStep < steps.length - 1) { currentStep++; initializeSteps(); }
   });
 
-  /* ========= Spinner & état d’envoi ========= */
+  /* ========= Spinner & reset ========= */
   const setSubmittingState = (isSubmitting) => {
     if (!submitBtn) return;
     if (isSubmitting) {
@@ -364,7 +404,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  /* ========= Reset & Confirmation ========= */
   const resetForm = () => {
     form.reset();
     document.querySelectorAll('.button-group').forEach(g => g.classList.remove('invalid'));
@@ -374,8 +413,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('.form-step.confirmation')?.remove();
     document.querySelectorAll('[id^="summary"]').forEach((el) => el.textContent = 'Non renseigné');
     if (messageContainer) { messageContainer.style.display = 'none'; messageContainer.textContent = ''; }
-    resetInteractiveState(); setSubmittingState(false);
-    currentStep = 0; initializeSteps();
+    resetInteractiveState();
+    setSubmittingState(false);
+    currentStep = 0;
+    initializeSteps();
   };
 
   const showConfirmationMessage = (requestId) => {
@@ -398,127 +439,150 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('.form-container').appendChild(confirmationStep);
     steps.forEach((s) => s.classList.remove('active'));
     confirmationStep.classList.add('active');
-    prevBtn.style.display = 'none'; nextBtn.style.display = 'none'; submitBtn.style.display = 'none';
+    prevBtn.style.display = 'none';
+    nextBtn.style.display = 'none';
+    submitBtn.style.display = 'none';
     updateWizardStepsDisplay(wizardSteps.length);
     document.getElementById('newRequestBtn').addEventListener('click', resetForm);
   };
 
-  /* ========= Popup : liste d’attente ========= */
-  popupSendBtn?.addEventListener('click', async () => {
-    const email = (waitlistEmail?.value || '').trim();
-    if (!validateEmail(email)) { alert('Veuillez saisir un email valide.'); return; }
-    try {
-      if (window.emailjs?.send) {
-        await emailjs.send('service_uzzmtzc', 'template_waitlist', {
-          to_email: 'ben@smartimmo.pro',
-          prospect_email: email,
-          postal_code: (postalCodeInput.value || '').trim()
-        });
-      }
-      alert('Merci ! Nous vous préviendrons dès que le service sera disponible.');
-      closePopup(); if (waitlistEmail) waitlistEmail.value = '';
-    } catch (err) {
-      console.error('Erreur waitlist :', err);
-      alert("Impossible d'enregistrer votre email pour le moment. Réessayez plus tard.");
-    }
-  });
+  /* ========= Popup : liste d’attente → envoi vers GAS ========= */
+popupSendBtn?.addEventListener('click', async () => {
+  const email = (waitlistEmail?.value || '').trim();
+  if (!validateEmail(email)) {
+    alert('Veuillez saisir un email valide.');
+    return;
+  }
 
-  /* ========= Soumission ========= */
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
+  // Infos utiles à transmettre
+  const cp   = (postalCodeInput?.value || '').trim();
+  const city = (cityInput?.value || '').trim();
 
-    if (!validateStep()) {
-      showMessage('Veuillez remplir tous les champs obligatoires correctement avant de soumettre.', 'error');
-      return;
-    }
-    if (!cguCheckbox?.checked) {
-      showMessage('Vous devez accepter les Conditions Générales d’Utilisation avant de soumettre le formulaire.', 'error');
-      return;
-    }
+  // Préviens le user immédiatement
+  popupSendBtn.disabled = true;
+  popupSendBtn.textContent = 'Envoi…';
 
-    const cp = (postalCodeInput.value || '').trim();
-    if (!/^\d{5}$/.test(cp) || !isAllowedPostalCode(cp)) { openPopup(); return; }
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 12000);
 
-    const requestId = generateUniqueId(cp);
-    const data = {
-      name: document.getElementById('name').value,
-      email: document.getElementById('email').value,
-      phone: document.getElementById('phone').value,
-      address: document.getElementById('address').value,
-      city: cityInput.value,
-      postalCode: cp,
-      addressComplement: document.getElementById('addressComplement').value || 'Non renseigné',
-      role: document.getElementById('role').value,
-      type: document.getElementById('type').value,
-      description: document.getElementById('description').value,
-      priority: document.getElementById('priority').value,
-      request_id: requestId,      // ⛳️ cet ID est écrit tel quel dans le Sheet (le serveur ne le change pas)
-      _ua: navigator.userAgent,   // debug utile côté Sheet
-      _origin: location.origin    // debug utile côté Sheet
-    };
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // même technique que le formulaire
+      mode: 'cors',
+      signal: controller.signal,
+      body: JSON.stringify({
+        action: 'waitlist',
+        email,
+        postalCode: cp,
+        city,
+        source: 'smartimmo-web',
+        ua: navigator?.userAgent || ''
+      })
+    });
+    clearTimeout(t);
 
-    try {
-      setSubmittingState(true);
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok || !out.ok) throw new Error(out?.error || `HTTP ${res.status}`);
 
-      /* 1) Enregistrement Google Sheet (Apps Script)
-         - pas de headers (évite préflight iOS)
-         - fallback no-cors si nécessaire (réponse opaque, mais POST parti)
-         - l’ID côté client fait foi car le serveur le conserve tel quel
-      */
-      try {
-        await fetch(WEB_APP_URL, { method: "POST", body: JSON.stringify(data) });
-      } catch (err1) {
-        try {
-          await fetch(WEB_APP_URL, { method: "POST", mode: "no-cors", body: JSON.stringify(data) });
-        } catch (err2) {
-          console.error('Apps Script KO', err2);
-          showMessage("Impossible d'enregistrer votre demande dans Google Sheet. Merci de réessayer.", 'error', 12000);
-          setSubmittingState(false);
-          return;
-        }
-      }
+    alert('Merci ! Nous vous préviendrons dès que le service sera disponible.');
+    closePopup();
+    if (waitlistEmail) waitlistEmail.value = '';
+  } catch (err) {
+    console.error('Waitlist error:', err);
+    alert('Désolé, l’enregistrement a échoué. Réessayez dans un instant.');
+  } finally {
+    popupSendBtn.disabled = false;
+    popupSendBtn.textContent = 'Me prévenir';
+  }
+});
+  /* ========= Soumission → Google Apps Script (Modèle B) ========= */
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (submitBtn?.disabled) return;
+  
+  // Validations déjà en place
+  if (!validateStep()) {
+    showMessage('Veuillez remplir tous les champs obligatoires correctement avant de soumettre.', 'error');
+    return;
+  }
+  if (!cguCheckbox?.checked) {
+    showMessage('Vous devez accepter les Conditions Générales d’Utilisation avant de soumettre le formulaire.', 'error');
+    return;
+  }
+if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) {
+  showMessage('Vous êtes hors-ligne. Vérifiez votre connexion internet.', 'error');
+  return;
+}
+  const cp = (postalCodeInput.value || '').trim();
+  if (!/^\d{5}$/.test(cp) || !isAllowedPostalCode(cp)) { openPopup(); return; }
 
-      /* 2) Emails — utilisent le MÊME requestId que celui envoyé au serveur */
-      if (!window.emailjs || !emailjs.send) throw new Error('EmailJS non chargé');
+  // ID ticket
+  const requestId = generateUniqueId(cp);
 
-      const toOwner = emailjs.send('service_uzzmtzc', 'template_bes6bcg', { to_email: 'ben@smartimmo.pro', ...data });
-      const toClient = emailjs.send('service_uzzmtzc', 'template_dtvz9jh', { to_email: data.email, ...data });
+  // 🔁 Payload Modèle B (et compat anciennes clés)
+  const payload = {
+    // Modèle B
+    request_id: requestId,
+    name:        (document.getElementById('name').value || '').trim(),
+    email:       (document.getElementById('email').value || '').trim(),
+    phone: (document.getElementById('phone').value || '').replace(/\s+/g, '').trim(),
+    role:        (document.getElementById('role').value || '').trim(),
+    address:     (document.getElementById('address').value || '').trim(),
+    addressComplement: (document.getElementById('addressComplement')?.value || '').trim(),
+    postalCode:  cp,
+    city:        (cityInput.value || '').trim(),
+    type:        (document.getElementById('type').value || '').trim(),
+    description: (document.getElementById('description').value || '').trim(),
+    priority:    (document.getElementById('priority').value || '').trim(),
+    source:      'smartimmo-web',
 
-      const results = await Promise.allSettled([toOwner, toClient]);
-      const ownerOK  = results[0].status === 'fulfilled';
-      const clientOK = results[1].status === 'fulfilled';
+    // Compat ancien schéma (si besoin ailleurs)
+    ticketId:         requestId,
+    nom:              (document.getElementById('name').value || '').trim(),
+    telephone: (document.getElementById('phone').value || '').replace(/\s+/g, '').trim(),
+    ville:            (cityInput.value || '').trim(),
+    typeIntervention: (document.getElementById('type').value || '').trim()
+  };
+// Défauts si l’utilisateur n’a pas cliqué un bouton
+payload.role     = payload.role     || 'N/C';
+payload.priority = payload.priority || 'Non';
+payload.type     = payload.type     || 'N/C';
+  try {
+    setSubmittingState(true);
 
-      if (!ownerOK || !clientOK) {
-        let msg = `<strong>Demande enregistrée</strong> (ID: <code>${requestId}</code>) — mais problème d’envoi d’email.<br><ul style="margin:6px 0 0 18px;padding:0">`;
-        msg += `<li>Propriétaire : ${ownerOK ? '✅ OK' : `❌ KO — <code>${results[0].reason?.text || results[0].reason?.message || 'inconnu'}</code>`}</li>`;
-        msg += `<li>Client : ${clientOK ? '✅ OK' : `❌ KO — <code>${results[1].reason?.text || results[1].reason?.message || 'inconnu'}</code>`}</li>`;
-        msg += `</ul>`;
-        showMessage(msg, 'error', 15000);
-      } else {
-        showMessage('Demande enregistrée ✅ et emails envoyés.', 'success', 4000);
-      }
+    // Anti-prévol CORS : on poste en text/plain
+    const controller = new AbortController();
+const t = setTimeout(() => controller.abort(), 15000);
 
-      /* 3) Confirmation — affiche le même ID que le Sheet et les emails */
-      showConfirmationMessage(requestId);
+const res = await fetch(GAS_URL, {
+  method: 'POST',
+  headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+  mode: 'cors',
+  body: JSON.stringify(payload),
+  signal: controller.signal
+});
+clearTimeout(t);
 
-    } catch (err) {
-      console.error('Erreur lors de l’envoi :', err);
-      showMessage(`Une erreur est survenue lors de l’envoi.<br><code>${err?.message || err}</code>`, 'error', 12000);
-    } finally {
+    const out = await res.json().catch(() => ({}));
+    console.log('GAS status', res.status, 'response', out); // log utile
+
+    if (!res.ok || !out.ok) {
+      const msg = out?.error || `HTTP ${res.status}`;
+      showMessage(`Erreur d'enregistrement : ${msg}`, 'error');
       setSubmittingState(false);
+      return;
     }
-  });
+
+    // Succès
+    showConfirmationMessage(requestId);
+  } catch (err) {
+    console.error('Erreur lors de l’envoi :', err);
+    showMessage('Une erreur est survenue lors de l’envoi. Veuillez réessayer.', 'error');
+    setSubmittingState(false);
+  }
+});
 
   /* GO */
   initializeSteps();
-
-  // Alerte utile si ouvert en local
-  if (location.protocol === 'file:') {
-    showMessage(
-      "Vous visualisez la page en <b>local (file://)</b>. Certains appels réseau peuvent être bloqués.<br>" +
-      "Utilisez <b>https://smartimmo.pro</b> (ou Textastic en mode <b>Remote</b>).",
-      'error',
-      12000
-    );
-  }
 });

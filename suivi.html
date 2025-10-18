@@ -4,60 +4,149 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Suivi de demande – SmartImmo.Pro</title>
-  <link rel="stylesheet" href="styles.css"/>
+  <!-- On réutilise le même CSS que le formulaire -->
+  <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
   <header>
+    <!-- ⚠️ respecte la casse du fichier -->
     <img src="Logo.png" alt="Logo SmartImmo">
   </header>
 
   <main>
     <div class="form-container">
-      <!-- Bouton retour vers l’accueil (identique au formulaire) -->
+      <!-- Bouton retour identique au formulaire -->
       <div class="back-home-wrap">
-        <button type="button" class="nav-btn back-home" onclick="window.location.href='index.html'">
-          <!-- flèche gauche -->
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+        <a class="nav-btn back-home" href="index.html">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
             <path fill="currentColor" d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
           </svg>
           <span>Accueil</span>
-        </button>
+        </a>
       </div>
 
       <h2>Suivi de votre demande</h2>
-      <p>Entrez votre email et votre numéro unique pour consulter l’état.</p>
+      <p style="text-align:center;margin-bottom:10px;">
+        Renseignez <strong>votre email</strong> et votre <strong>numéro de ticket</strong> pour consulter l’état.
+      </p>
 
-      <form id="trackForm" onsubmit="event.preventDefault(); alert('La consultation en ligne sera activée prochainement.');">
+      <div id="trackMsg" class="message" aria-live="polite"></div>
+
+      <!-- Formulaire -->
+      <form id="trackForm" novalidate>
         <label for="trackEmail">Adresse email *</label>
         <input type="email" id="trackEmail" required placeholder="exemple@mail.com"/>
 
-        <label for="trackId">Numéro unique *</label>
-        <input type="text" id="trackId" required placeholder="ex: 51-2410121530-42"/>
+        <label for="trackId">Numéro de ticket *</label>
+        <input type="text" id="trackId" required placeholder="ex : 08-2510112303-13"/>
 
         <div class="form-navigation">
-          <button type="submit" class="nav-btn nav-next">
+          <button id="trackBtn" type="submit" class="nav-btn nav-next">
             <span>Consulter</span>
-            <!-- flèche droite -->
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
               <path fill="currentColor" d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6z"/>
             </svg>
           </button>
         </div>
       </form>
+
+      <!-- Résultat -->
+      <div id="trackResult" class="result-card" style="display:none">
+        <div class="result-head">
+          <div>
+            <div class="ticket-title">Ticket : <span id="rTicket"></span></div>
+            <div class="ticket-sub">Créée le <span id="rCreated"></span></div>
+          </div>
+          <div id="rBadge" class="badge">—</div>
+        </div>
+
+        <div class="grid">
+          <div><strong>Nom</strong><br><span id="rNom">—</span></div>
+          <div><strong>Email</strong><br><span id="rEmail">—</span></div>
+          <div><strong>Téléphone</strong><br><span id="rTel">—</span></div>
+          <div><strong>CP / Ville</strong><br><span id="rCpVille">—</span></div>
+          <div><strong>Type</strong><br><span id="rType">—</span></div>
+          <div class="grid-span"><strong>Description</strong><br><span id="rDesc">—</span></div>
+        </div>
+
+        <div class="actions">
+          <a class="nav-btn back-home" href="index.html">← Accueil</a>
+          <a class="nav-btn nav-next" href="formulaire.html">Déposer une nouvelle demande</a>
+        </div>
+      </div>
     </div>
   </main>
+
 <footer class="site-footer">
   <div class="footer-container">
-    <p><strong>SmartImmo.Pro</strong> – Votre partenaire de confiance pour toutes vos interventions.</p>
-    <p class="footer-subtext">
-      Nous supervisons chaque intervention afin de garantir la <strong>qualité</strong>, la <strong>fiabilité</strong> et la <strong>sécurité</strong> des travaux réalisés.
-    </p>
+    <p><strong>SmartImmo.Pro</strong> – Qualité, fiabilité, sécurité.</p>
     <p class="footer-legal">
-      © 2025 SmartImmo.Pro – Tous droits réservés |
-      <a href="#">Mentions légales</a> | <a href="#">Politique de confidentialité</a> | <a
-	  href="apropos.html">À propos</a>
+      © 2025 SmartImmo.Pro –
+    <a href="mentions-legales.html">Mentions légales</a> ·
+    <a href="confidentialite.html">Confidentialité</a> ·
+    <a href="cgu.html">CGU</a> ·
+    <a href="apropos.html">À propos</a>
     </p>
   </div>
 </footer>
+
+  <!-- JS (identique, non modifié) -->
+  <script>
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbwlbnnO-eVRZaaq-5oNEqyhglSwzd9OS67WCsqC-MtGkzFjXEKb8sFRzL5iFqqifkH_Rw/exec';
+    const $ = id => document.getElementById(id);
+    const trackMsg = $('trackMsg');
+    function showMsg(text, type='error'){ trackMsg.textContent=text; trackMsg.className='message '+type; trackMsg.style.display='block' }
+    function hideMsg(){ trackMsg.style.display='none' }
+    const isIsoDate = v => typeof v==='string' && /^\d{4}-\d{2}-\d{2}T/.test(v);
+    const pick = (obj, keys, fallback='') => { for(const k of keys){ const v=obj?.[k]; if(v!==undefined && v!==null && String(v).trim()!=='') return v } return fallback }
+    function setBadge(status){
+      const el = $('rBadge'); el.className = 'badge'; el.textContent = status || '—';
+      const s = (status||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+      if (s==='recue') el.classList.add('badge--recue');
+      else if (s==='planifiee') el.classList.add('badge--planifiee');
+      else if (s==='terminee') el.classList.add('badge--terminee');
+      else if (s==='facturee') el.classList.add('badge--facturee');
+      else if (s==='cloturee') el.classList.add('badge--cloturee');
+    }
+    $('trackForm').addEventListener('submit', async (e)=>{
+      e.preventDefault(); hideMsg(); $('trackResult').style.display='none';
+      const email = $('trackEmail').value.trim();
+      const ticketId = $('trackId').value.trim();
+      if(!email || !ticketId){ showMsg('Merci de renseigner votre email et votre numéro de ticket.'); return }
+      const btn = $('trackBtn'); btn.disabled=true; btn.firstElementChild.textContent='Recherche…';
+      try{
+        const url = new URL(GAS_URL);
+        url.searchParams.set('action','track'); url.searchParams.set('ticketId',ticketId); url.searchParams.set('email',email);
+        const res = await fetch(url.toString(), { method:'GET' });
+        const json = await res.json(); if(!json.ok) throw new Error(json.error || 'Introuvable');
+        const d = json.data || {};
+        const createdAt = pick(d, ['Horodatage','createdAt','creationDate']);
+        const ticket    = pick(d, ['Ticket','ticketId','id','numero','num'], ticketId);
+        const mail      = pick(d, ['Email','email','mail']);
+        const nom       = pick(d, ['Nom','nom','name','fullname']);
+        const tel       = pick(d, ['Téléphone','telephone','tel','phone','mobile']);
+        const cp        = pick(d, ['CP','postalCode','codePostal','zip']);
+        const ville     = pick(d, ['Ville','ville','city','commune']);
+        const statut    = pick(d, ['status','statut','etat']);
+        const typeInter = pick(d, ['type','Type','categorie','category']);
+        let   desc      = pick(d, ['Description','description','descriptif','message','details','commentaire']);
+        if(isIsoDate(desc) && createdAt && String(desc)===String(createdAt)) desc = '';
+        $('rTicket').textContent  = ticket || ticketId;
+        $('rCreated').textContent = createdAt ? new Date(createdAt).toLocaleString('fr-FR') : '-';
+        setBadge(statut);
+        $('rNom').textContent     = nom   || '—';
+        $('rEmail').textContent   = mail  || '—';
+        $('rTel').textContent     = tel   || '—';
+        $('rCpVille').textContent = `${cp||''} ${ville||''}`.trim() || '—';
+        $('rType').textContent    = typeInter || '—';
+        $('rDesc').textContent    = desc && !isIsoDate(desc) ? desc : '—';
+        $('trackResult').style.display='block';
+      }catch(err){ console.error(err); showMsg('Aucune demande trouvée pour ce ticket + email.'); }
+      finally{ btn.disabled=false; btn.firstElementChild.textContent='Consulter'; }
+    });
+  </script>
+</body>
+</html>
 </body>
 </html>
