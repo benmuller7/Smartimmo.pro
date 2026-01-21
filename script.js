@@ -3,7 +3,7 @@
  *****************************************/
 
 /** ==== CONFIG GAS ==== */
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwlbnnO-eVRZaaq-5oNEqyhglSwzd9OS67WCsqC-MtGkzFjXEKb8sFRzL5iFqqifkH_Rw/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzou8j1-pVoZm-FwajSFR1ouL5OgaY_x0zovzon6boEkvNOvMfSbgR2AFzeggrkvGYCcQ/exec';
 
 /** Génère un ID unique format : DEP-YYMMDDHHMM-RR */
 const generateUniqueId = (postalCode) => {
